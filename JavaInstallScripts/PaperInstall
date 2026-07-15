@@ -17,31 +17,38 @@ PROJECT=paper                # PROJECT: https://api.papermc.io/v2/projects/
 SERVER_JARFILE=server.jar    # LEAVE THIS PART ALONE
 # -- EDIT HERE | DO NOT EDIT BELOW -- #
 
-# Updated API base (old papermc.io/api/v2 returns 403)
-API_BASE="https://api.papermc.io/v2/projects/${PROJECT}"
+# Use the new v3 API
+API_BASE="https://fill.papermc.io/v3/projects/${PROJECT}"
 
 if [ -n "${DL_PATH}" ]; then
     echo -e "Using supplied download url: ${DL_PATH}"
     DOWNLOAD_URL=$(eval echo "$(echo "${DL_PATH}" | sed -e 's/{{/${/g' -e 's/}}/}/g')")
 else
-    VER_EXISTS=$(curl -s "${API_BASE}" | jq -r --arg VERSION "$MINECRAFT_VERSION" '.versions[] | select(. == $VERSION)' | head -1)
-    LATEST_VERSION=$(curl -s "${API_BASE}" | jq -r '.versions[-1]')
-
-    if [ -n "${VER_EXISTS}" ]; then
-        echo -e "Version is valid. Using version ${MINECRAFT_VERSION}"
-    else
-        echo -e "Version '${MINECRAFT_VERSION}' not found. Using latest: ${LATEST_VERSION}"
-        MINECRAFT_VERSION=${LATEST_VERSION}
+    # Automatically get the latest stable Minecraft version if not specified
+    if [ -z "$MINECRAFT_VERSION" ] || [ "$MINECRAFT_VERSION" == "latest" ]; then
+        MINECRAFT_VERSION=$(curl -s "${API_BASE}" | jq -r '
+            .versions 
+            | to_entries 
+            | map(select(.key | startswith("1."))) 
+            | sort_by(.key | split(".") | map(tonumber))
+            | .[-1].value[0]
+        ')
+        echo -e "> Detected latest Paper version: ${MINECRAFT_VERSION}"
     fi
 
-    BUILD_EXISTS=$(curl -s "${API_BASE}/versions/${MINECRAFT_VERSION}" | jq -r --arg BUILD "${BUILD_NUMBER}" '.builds[] | tostring | contains($BUILD)' | grep true)
-    LATEST_BUILD=$(curl -s "${API_BASE}/versions/${MINECRAFT_VERSION}" | jq -r '.builds[-1]')
+    # Check if the requested version exists by seeing if its versions endpoint returns an error
+    VERSION_CHECK=$(curl -s "${API_BASE}/versions/${MINECRAFT_VERSION}")
+    if echo "$VERSION_CHECK" | grep -q "error"; then
+        echo -e "> ERROR: Version '${MINECRAFT_VERSION}' not found."
+        exit 1
+    fi
 
-    if [ "${BUILD_EXISTS}" == "true" ]; then
-        echo -e "Build is valid for version ${MINECRAFT_VERSION}. Using build ${BUILD_NUMBER}"
-    else
-        echo -e "Using the latest ${PROJECT} build for version ${MINECRAFT_VERSION}: ${LATEST_BUILD}"
-        BUILD_NUMBER=${LATEST_BUILD}
+    echo -e "Version is valid. Using version ${MINECRAFT_VERSION}"
+
+    if [ -z "$BUILD_NUMBER" ] || [ "$BUILD_NUMBER" == "latest" ]; then
+        # The builds list is ordered from newest to oldest in v3, so [0] is latest
+        BUILD_NUMBER=$(echo "$VERSION_CHECK" | jq -r '.builds[0]')
+        echo -e "Using the latest ${PROJECT} build for version ${MINECRAFT_VERSION}: ${BUILD_NUMBER}"
     fi
 
     JAR_NAME="${PROJECT}-${MINECRAFT_VERSION}-${BUILD_NUMBER}.jar"
@@ -60,7 +67,12 @@ if [ -f "${SERVER_JARFILE}" ]; then
     mv "${SERVER_JARFILE}" "${SERVER_JARFILE}.old"
 fi
 
-curl -o "${SERVER_JARFILE}" "${DOWNLOAD_URL}"
+curl -sSL -A "mcserverV3/1.0" -o "${SERVER_JARFILE}" "${DOWNLOAD_URL}"
+
+if [ ! -s "${SERVER_JARFILE}" ]; then
+    echo -e "> ERROR: Download failed. File is empty or not found."
+    exit 1
+fi
 
 
 echo -e "> Paper installation complete!"
