@@ -20,9 +20,11 @@ CRASH_COUNT=0
 MAX_CRASHES=5
 
 while true; do
-  # Exit cleanly if stopserver requested a halt
+
+  # Exit cleanly ONLY if stopserver script explicitly requested a halt
   if [ -f "$SENTINEL" ]; then
     echo "> Stop requested. Java server will not restart."
+    rm -f "$SENTINEL"
     break
   fi
 
@@ -48,30 +50,35 @@ while true; do
   fi
 
   EXIT_CODE=$?
+  END_TIME=$(date +%s)
+  RUN_DURATION=$(( END_TIME - START_TIME ))
 
-  # If a stop was requested during server run, or the server exited cleanly (code 0), exit
-  if [ -f "$SENTINEL" ] || [ "$EXIT_CODE" -eq 0 ]; then
-    echo "> Java server stopped gracefully."
+  # Check sentinel AFTER server exits — stopserver writes this while server is running
+  if [ -f "$SENTINEL" ]; then
+    echo "> Java server stopped gracefully (via stopserver)."
+    rm -f "$SENTINEL"
     break
   fi
 
-  # If server ran for more than 60 seconds, it wasn't an instant crash — reset counter
-  END_TIME=$(date +%s)
-  RUN_DURATION=$(( END_TIME - START_TIME ))
+  echo ""
+  echo "> Server exited with code $EXIT_CODE after ${RUN_DURATION}s."
+
+  # If server ran for more than 60 seconds, it wasn't an instant crash — reset crash counter
   if [ "$RUN_DURATION" -ge 60 ]; then
     CRASH_COUNT=0
+    echo "> Server was running fine — resetting crash counter."
   fi
 
-  CRASH_COUNT=$((CRASH_COUNT + 1))
-  echo ""
-  echo "> Server exited with code $EXIT_CODE. (Crash #${CRASH_COUNT})"
+  CRASH_COUNT=$(( CRASH_COUNT + 1 ))
+  echo "> Crash #${CRASH_COUNT} detected."
 
   if [ "$CRASH_COUNT" -ge "$MAX_CRASHES" ]; then
-    echo "> Server has crashed $CRASH_COUNT times in a row. Giving up to prevent a crash loop."
-    echo "> Please check your server logs and fix the issue, then run ./startserver again."
+    echo "> Server has crashed ${CRASH_COUNT} times in a row. Giving up to prevent a crash loop."
+    echo "> Check your server logs and fix the issue, then run ./startserver again."
     break
   fi
 
   echo "> Restarting server in ${RESTART_DELAY} seconds... (Press Ctrl+C to abort)"
   sleep "$RESTART_DELAY"
+
 done
