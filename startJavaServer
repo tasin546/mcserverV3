@@ -33,6 +33,13 @@ while true; do
   echo "  Starting Minecraft Java Server..."
   echo "=========================================="
 
+  # Forcefully kill any lingering zombie server processes to prevent "Address already in use"
+  if command -v fuser &>/dev/null; then
+    fuser -k 25565/tcp >/dev/null 2>&1
+  fi
+  # Fallback: aggressively kill lingering java processes attached to server.jar
+  pkill -9 -f "java.*server.jar" >/dev/null 2>&1
+
   START_TIME=$(date +%s)
 
   # Detect Forge servers (which use run.sh instead of server.jar)
