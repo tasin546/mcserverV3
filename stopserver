@@ -1,0 +1,49 @@
+#!/bin/bash
+export MAIN_DIR=$PWD
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+CYAN='\033[0;36m'
+NC='\033[0m'
+
+info()    { echo -e "${CYAN}> $1${NC}"; }
+success() { echo -e "${GREEN}> $1${NC}"; }
+error()   { echo -e "${RED}> ERROR: $1${NC}"; }
+
+clear
+echo -e "${RED}"
+echo "=========================================="
+echo "  Stopping all Server Processes..."
+echo "=========================================="
+echo -e "${NC}"
+
+# Write sentinel so startJavaServer auto-restart loop knows to exit cleanly
+touch "$MAIN_DIR/.stop_requested"
+info "Stop signal sent to server processes."
+
+# Give the server a chance to handle the signal gracefully
+sleep 2
+
+# Send 'stop' command to the running Minecraft server (graceful shutdown)
+if screen -ls | grep -q "server"; then
+  info "Sending 'stop' command to Minecraft server..."
+  screen -S server -p 0 -X stuff "stop$(printf '\r')"
+  sleep 5
+fi
+
+# Kill only our specific screen sessions (not all user sessions)
+for session in server playit afk; do
+  if screen -ls | grep -q "$session"; then
+    screen -S "$session" -X quit 2>/dev/null
+  fi
+done
+sleep 1
+
+# Clean up sentinel
+rm -f "$MAIN_DIR/.stop_requested"
+
+success "All server processes terminated!"
+echo ""
+echo "  To start again:  ./startserver"
+echo "  To delete:       ./uninstall"
+echo ""

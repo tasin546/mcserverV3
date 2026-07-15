@@ -1,0 +1,76 @@
+#!/bin/bash
+# =============================================
+# World Backup Script
+# Creates a timestamped zip of your world files
+# and stores them in the backups/ folder.
+# =============================================
+
+export MAIN_DIR=$PWD
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+CYAN='\033[0;36m'
+YELLOW='\033[1;33m'
+NC='\033[0m'
+
+info()    { echo -e "${CYAN}> $1${NC}"; }
+success() { echo -e "${GREEN}> $1${NC}"; }
+warn()    { echo -e "${YELLOW}> $1${NC}"; }
+error()   { echo -e "${RED}> ERROR: $1${NC}"; }
+
+TIMESTAMP=$(date '+%Y-%m-%d_%H-%M-%S')
+BACKUP_DIR="$MAIN_DIR/backups"
+BACKUP_FILE="$BACKUP_DIR/world_backup_${TIMESTAMP}.tar.gz"
+
+mkdir -p "$BACKUP_DIR"
+
+# Check if server folder exists
+if [ ! -d "$MAIN_DIR/server" ]; then
+  error "Server folder not found. Nothing to back up."
+  exit 1
+fi
+
+info "Starting world backup..."
+info "Timestamp: $TIMESTAMP"
+
+# List of world directories to back up (Java uses world/, Bedrock uses worlds/)
+WORLD_DIRS=()
+for dir in "$MAIN_DIR/server/world" "$MAIN_DIR/server/world_nether" "$MAIN_DIR/server/world_the_end" "$MAIN_DIR/server/worlds"; do
+  if [ -d "$dir" ]; then
+    WORLD_DIRS+=("$dir")
+  fi
+done
+
+if [ ${#WORLD_DIRS[@]} -eq 0 ]; then
+  warn "No world folders found. Backing up the entire server/ directory instead."
+  WORLD_DIRS=("$MAIN_DIR/server")
+fi
+
+info "Backing up: ${WORLD_DIRS[*]}"
+# Use -C to store relative paths so the backup can be restored anywhere
+tar -czf "$BACKUP_FILE" -C "$MAIN_DIR" $(printf '%s\n' "${WORLD_DIRS[@]}" | sed "s|$MAIN_DIR/||g") 2>/dev/null
+
+if [ $? -ne 0 ]; then
+  error "Backup failed. Check disk space and try again."
+  exit 1
+fi
+
+BACKUP_SIZE=$(du -sh "$BACKUP_FILE" | cut -f1)
+success "Backup complete!"
+echo ""
+echo "  File:  $BACKUP_FILE"
+echo "  Size:  $BACKUP_SIZE"
+echo ""
+
+# Keep only the last 5 backups to save disk space
+BACKUP_COUNT=$(ls "$BACKUP_DIR"/*.tar.gz 2>/dev/null | wc -l)
+if [ "$BACKUP_COUNT" -gt 5 ]; then
+  info "Cleaning old backups (keeping last 5)..."
+  ls -t "$BACKUP_DIR"/*.tar.gz | tail -n +6 | xargs rm -f
+  success "Old backups cleaned."
+fi
+
+echo ""
+info "To download your backup, use the Cloud Shell Editor's download feature"
+info "or run: cloudshell dl $BACKUP_FILE"
+echo ""

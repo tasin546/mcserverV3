@@ -1,0 +1,26 @@
+#!/bin/bash
+# BungeeCord Installation Script
+# Downloads BungeeCord directly from md-5's CI server (no compilation needed)
+
+MAIN_DIR=$PWD
+echo "Installing the latest BungeeCord version..."
+echo "If you want a specific build, change BUILD_URL in JavaInstallScripts/BungeecordInstall"
+
+# Direct download URL — much simpler than using BuildTools
+BUILD_URL="https://ci.md-5.net/job/BungeeCord/lastSuccessfulBuild/artifact/bootstrap/target/BungeeCord.jar"
+
+cd ..
+mkdir -p server
+cd server/
+
+echo -e "\nDownloading BungeeCord..."
+wget -q "$BUILD_URL" -O server.jar
+
+if [ ! -f server.jar ] || [ ! -s server.jar ]; then
+    echo -e "ERROR: Download failed. Check your internet connection."
+    exit 1
+fi
+
+echo -e "BungeeCord installation complete!"
+echo -e "Note: BungeeCord requires Java 17 or higher."
+echo -e "Note: Configure config.yml before starting the server."

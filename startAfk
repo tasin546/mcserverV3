@@ -1,0 +1,54 @@
+#!/bin/bash
+# =============================================
+# Keep-Alive Heartbeat Script
+# Replaces bpytop as the primary AFK tool.
+# Prints a timestamped heartbeat every 4 minutes
+# to prevent Google Cloud Shell from timing out.
+# Also optionally runs bpytop if available.
+# =============================================
+
+export MAIN_DIR=$PWD
+INTERVAL=240 # 4 minutes in seconds
+LOG_FILE="$MAIN_DIR/logs/keepalive.log"
+
+mkdir -p "$MAIN_DIR/logs"
+
+echo "=========================================="
+echo "  Keep-Alive Heartbeat Running"
+echo "  Heartbeat every ${INTERVAL}s (~4 min)"
+echo "  Log: logs/keepalive.log"
+echo "=========================================="
+
+# If bpytop is available, run it in the background just for the display
+BPYTOP_PID=""
+if command -v bpytop &>/dev/null; then
+  bpytop &
+  BPYTOP_PID=$!
+elif [ -f "$HOME/.local/bin/bpytop" ]; then
+  "$HOME/.local/bin/bpytop" &
+  BPYTOP_PID=$!
+fi
+
+# Clean up bpytop on exit to prevent orphan processes
+cleanup() {
+  if [ -n "$BPYTOP_PID" ]; then
+    kill "$BPYTOP_PID" 2>/dev/null
+  fi
+}
+trap cleanup EXIT INT TERM
+
+# Heartbeat loop
+TICK=0
+while true; do
+  TICK=$((TICK + 1))
+  TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
+  MSG="[Heartbeat #${TICK}] ${TIMESTAMP} - Server is alive."
+  echo "$MSG" | tee -a "$LOG_FILE"
+
+  # Also check if server screen is still alive; warn if not
+  if ! screen -ls | grep -q "server"; then
+    echo "[WARN] $TIMESTAMP - Server screen session not found!" | tee -a "$LOG_FILE"
+  fi
+
+  sleep "$INTERVAL"
+done

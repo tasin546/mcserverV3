@@ -1,0 +1,34 @@
+#!/bin/bash
+export MAIN_DIR=$PWD
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+CYAN='\033[0;36m'
+YELLOW='\033[1;33m'
+NC='\033[0m'
+
+info()    { echo -e "${CYAN}> $1${NC}"; }
+success() { echo -e "${GREEN}> $1${NC}"; }
+warn()    { echo -e "${YELLOW}> $1${NC}"; }
+error()   { echo -e "${RED}> ERROR: $1${NC}"; }
+
+# =============================================
+# Check if playit is installed
+# =============================================
+if ! command -v playit &>/dev/null; then
+  warn "Playit is not installed. Attempting to install it now..."
+  curl -SsL https://playit-cloud.github.io/ppa/key.gpg | gpg --dearmor | sudo tee /etc/apt/trusted.gpg.d/playit.gpg > /dev/null
+  echo "deb [signed-by=/etc/apt/trusted.gpg.d/playit.gpg] https://playit-cloud.github.io/ppa/data ./" | sudo tee /etc/apt/sources.list.d/playit-cloud.list
+  sudo apt update -qq
+  sudo apt install -y -qq playit
+  if [ $? -ne 0 ]; then
+    error "Failed to install Playit. Friends won't be able to connect."
+    error "Try manually: https://playit.gg"
+    exit 1
+  fi
+  success "Playit installed!"
+fi
+
+info "Starting Playit tunnel..."
+cd "$MAIN_DIR"
+playit

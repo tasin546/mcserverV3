@@ -1,0 +1,73 @@
+#!/bin/bash
+# PocketMine-MP Installation Script
+# Updated for PocketMine-MP v5.x + PHP 8.2
+
+sudo apt update -qq
+sudo apt install -y -qq zip unzip wget curl jq > /dev/null
+
+cd ..
+mkdir -p server
+cd server
+
+# -- EDIT HERE | DO NOT EDIT ABOVE -- #
+VERSION=latest              # VERSION: https://api.github.com/repos/pmmp/PocketMine-MP/releases/latest
+GITHUB_PACKAGE=pmmp/PocketMine-MP  # LEAVE THIS PART ALONE
+MATCH=PocketMine-MP.phar           # LEAVE THIS PART ALONE
+# -- EDIT HERE | DO NOT EDIT BELOW -- #
+
+echo -e "\n> Fetching PocketMine-MP release info..."
+LATEST_JSON=$(curl --silent "https://api.github.com/repos/${GITHUB_PACKAGE}/releases/latest")
+RELEASES=$(curl --silent "https://api.github.com/repos/${GITHUB_PACKAGE}/releases")
+
+if [ -z "${VERSION}" ] || [ "${VERSION}" == "latest" ]; then
+    DOWNLOAD_LINK=$(echo "${LATEST_JSON}" | jq .assets | jq -r '.[].browser_download_url' | grep -i "${MATCH}")
+else
+    VERSION_CHECK=$(echo "${RELEASES}" | jq -r --arg VERSION "${VERSION}" '.[] | select(.tag_name==$VERSION) | .tag_name')
+    if [ "${VERSION}" == "${VERSION_CHECK}" ]; then
+        DOWNLOAD_LINK=$(echo "${RELEASES}" | jq -r --arg VERSION "${VERSION}" '.[] | select(.tag_name==$VERSION) | .assets[].browser_download_url' | grep -i "${MATCH}")
+    else
+        echo -e "> Version '${VERSION}' not found. Defaulting to latest release."
+        DOWNLOAD_LINK=$(echo "${LATEST_JSON}" | jq .assets | jq -r '.[].browser_download_url' | grep -i "${MATCH}")
+    fi
+fi
+
+# Validate the download link before using it
+if [ -n "${DOWNLOAD_LINK}" ]; then
+    if curl --output /dev/null --silent --head --fail "${DOWNLOAD_LINK}"; then
+        echo -e "> Download link is valid: ${DOWNLOAD_LINK}"
+    else
+        echo -e "> ERROR: Download link is invalid. Exiting."
+        exit 2
+    fi
+else
+    echo -e "> ERROR: Could not determine download link. Exiting."
+    exit 1
+fi
+
+echo -e "> Downloading PocketMine-MP..."
+curl -sSL "${DOWNLOAD_LINK}" > PocketMine-MP.phar
+
+# Download latest PHP binary for PocketMine-MP
+echo -e "\n> Fetching latest PHP binary for PocketMine-MP..."
+PHP_URL=$(curl -sSL "https://api.github.com/repos/pmmp/PHP-Binaries/releases/latest" | jq -r '.assets[] | select(.name | contains("Linux-x86_64")) | .browser_download_url' | head -1)
+
+if [ -z "$PHP_URL" ] || [ "$PHP_URL" == "null" ]; then
+    echo -e "> WARNING: Could not auto-detect PHP binary URL. Using fallback..."
+    PHP_URL="https://github.com/pmmp/PHP-Binaries/releases/download/php-8.3-latest/PHP_Linux-x86_64.tar.gz"
+fi
+
+echo -e "> Downloading PHP binary: ${PHP_URL}"
+curl -sSL -o php.binary.tar.gz "${PHP_URL}"
+
+echo -e "\n> Extracting PHP binaries..."
+tar -xzf php.binary.tar.gz
+
+echo -e "\n> Cleaning up..."
+rm -f php.binary.tar.gz  # Fixed: was wrongly using /mnt/server/ path
+
+echo -e "\n> Creating required files and folders..."
+touch banned-ips.txt banned-players.txt ops.txt white-list.txt server.log
+mkdir -p players worlds plugins resource_packs
+
+echo -e "\n> PocketMine-MP installation complete!"
+echo -e "> Version installed: $(echo "${LATEST_JSON}" | jq -r '.tag_name')"

@@ -1,0 +1,16 @@
+# Server runtime files
+eula.txt
+server/
+bin/
+backups/
+logs/
+
+# Tunnel binaries
+playit
+ngrok
+
+# Sentinel files
+.stop_requested
+
+# Forge wrapper (generated per-install)
+forge_run.sh

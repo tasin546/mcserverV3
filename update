@@ -1,0 +1,86 @@
+#!/bin/bash
+# =============================================
+# mcserverV3 Update Script
+# Pulls latest scripts from GitHub while
+# preserving your server data, Java, and backups.
+# =============================================
+
+export MAIN_DIR="$PWD"
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+CYAN='\033[0;36m'
+YELLOW='\033[1;33m'
+NC='\033[0m'
+
+info()    { echo -e "${CYAN}> $1${NC}"; }
+success() { echo -e "${GREEN}> $1${NC}"; }
+warn()    { echo -e "${YELLOW}> WARNING: $1${NC}"; }
+error()   { echo -e "${RED}> ERROR: $1${NC}"; }
+
+echo ''
+echo '======================================================'
+echo '   mcserverV3 — Update Script'
+echo '   This updates the PROJECT scripts only.'
+echo '   Your Minecraft server data is preserved.'
+echo '======================================================'
+echo ''
+
+# Safety: make sure we're in the right directory
+if [ ! -f "$MAIN_DIR/install" ] || [ ! -d "$MAIN_DIR/JavaInstallScripts" ]; then
+  error "This doesn't look like the mcserverV3 directory."
+  error "Please run this script from inside the mcserverV3 folder."
+  exit 1
+fi
+
+TEMP_DIR=$(mktemp -d)
+
+info "Downloading latest mcserverV3 scripts..."
+git clone --depth 1 https://github.com/Tasin546/mcserverV3 "$TEMP_DIR" 2>/dev/null
+
+if [ $? -ne 0 ]; then
+  error "Failed to download update. Check your internet connection."
+  rm -rf "$TEMP_DIR"
+  exit 1
+fi
+
+# Remove things from the clone that we DON'T want to overwrite
+rm -rf "$TEMP_DIR/.git"
+rm -rf "$TEMP_DIR/server"
+rm -rf "$TEMP_DIR/bin"
+rm -rf "$TEMP_DIR/backups"
+rm -rf "$TEMP_DIR/logs"
+rm -f "$TEMP_DIR/.stop_requested"
+
+info "Backing up your current scripts to /tmp/mcserver_backup_$$..."
+BACKUP="$TEMP_DIR/../mcserver_backup_$$"
+mkdir -p "$BACKUP"
+# Only backup scripts, not data
+for f in install installJava installBedrock startserver startJavaServer startBedrockServer stopserver startAfk startPlayIt backup uninstall update .checkserver; do
+  [ -f "$MAIN_DIR/$f" ] && cp "$MAIN_DIR/$f" "$BACKUP/"
+done
+
+info "Applying updates..."
+# Copy new scripts over old ones (but NOT server/, bin/, backups/, logs/)
+cp -r "$TEMP_DIR"/* "$MAIN_DIR/" 2>/dev/null
+cp "$TEMP_DIR"/.checkserver "$MAIN_DIR/" 2>/dev/null
+cp "$TEMP_DIR"/.gitignore "$MAIN_DIR/" 2>/dev/null
+
+# Make everything executable
+chmod +x "$MAIN_DIR"/install "$MAIN_DIR"/installJava "$MAIN_DIR"/installBedrock \
+         "$MAIN_DIR"/startserver "$MAIN_DIR"/startJavaServer "$MAIN_DIR"/startBedrockServer \
+         "$MAIN_DIR"/stopserver "$MAIN_DIR"/startAfk "$MAIN_DIR"/startPlayIt \
+         "$MAIN_DIR"/backup "$MAIN_DIR"/uninstall "$MAIN_DIR"/update \
+         "$MAIN_DIR"/.checkserver 2>/dev/null
+
+# Clean up
+rm -rf "$TEMP_DIR"
+
+success "Update complete!"
+echo ""
+echo "  Your server data, Java installation, and backups are untouched."
+echo "  Old scripts backed up to: $BACKUP/"
+echo ""
+echo "  If something went wrong, restore with:"
+echo "    cp $BACKUP/* $MAIN_DIR/"
+echo ""

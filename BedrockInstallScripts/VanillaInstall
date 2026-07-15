@@ -1,0 +1,88 @@
+#!/bin/bash
+
+sudo apt update -qq
+sudo apt install -y -qq zip unzip wget curl jq
+
+cd ..
+mkdir -p server
+cd server
+
+# -- EDIT HERE | DO NOT EDIT ABOVE -- #
+BEDROCK_VERSION=latest # LEAVE THIS PART ALONE (If you want to play on a different version, it's based on Minecraft Version)
+LD_LIBRARY_PATH=. # LEAVE THIS PART ALONE
+SERVERNAME="Bedrock Dedicated Server" # ANYTHING YOU LIKE TO NAME
+GAMEMODE=survival # GAMEMODE: survival,creative,adventure
+DIFFICULTY=easy # DIFFICULTY: peaceful,easy,normal,hard
+CHEATS=false # CHEATS: true,false
+# -- EDIT HERE | DO NOT EDIT BELOW -- #
+
+if [ -z "${BEDROCK_VERSION}" ] || [ "${BEDROCK_VERSION}" == "latest" ]; then
+    echo -e "\n> Detecting latest Bedrock version..."
+    
+    # Try to get latest version from the Mojang version manifest (most reliable)
+    LATEST_VER=$(curl -sSL "https://raw.githubusercontent.com/nicholasgasior/bds-version/main/latest" 2>/dev/null | tr -d '[:space:]')
+    
+    if [ -z "$LATEST_VER" ]; then
+        # Fallback: ask user for version
+        echo -e "> Could not auto-detect latest version."
+        echo -e "> Please check https://www.minecraft.net/en-us/download/server/bedrock for the latest version."
+        echo -e "> Example: 1.21.51.02"
+        read -rp "Bedrock version: " LATEST_VER
+        if [ -z "$LATEST_VER" ]; then
+            echo -e "> No version provided. Exiting."
+            exit 1
+        fi
+    fi
+    
+    echo -e "> Using Bedrock version: ${LATEST_VER}"
+    DOWNLOAD_URL="https://www.minecraft.net/bedrockdedicatedserver/bin-linux/bedrock-server-${LATEST_VER}.zip"
+else
+    echo -e "\n> Using specified Bedrock version: ${BEDROCK_VERSION}"
+    DOWNLOAD_URL="https://www.minecraft.net/bedrockdedicatedserver/bin-linux/bedrock-server-${BEDROCK_VERSION}.zip"
+fi
+
+DOWNLOAD_FILE=$(echo ${DOWNLOAD_URL} | rev | cut -d"/" -f1 | rev)
+
+echo -e "> Backing up config files..."
+rm -f *.bak 2>/dev/null
+cp server.properties server.properties.bak 2>/dev/null
+cp permissions.json permissions.json.bak 2>/dev/null
+cp whitelist.json whitelist.json.bak 2>/dev/null
+cp allowlist.json allowlist.json.bak 2>/dev/null
+
+echo -e "> Downloading: $DOWNLOAD_URL"
+
+curl -L -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36" \
+     -H "Accept-Language: en" -o "$DOWNLOAD_FILE" "$DOWNLOAD_URL"
+
+if [ ! -s "$DOWNLOAD_FILE" ]; then
+    echo -e "> ERROR: Download failed or file is empty."
+    echo -e "> The download URL may have changed. Please enter the version manually."
+    echo -e "> Example: 1.21.51.02"
+    read -rp "Bedrock version: " MANUAL_VERSION
+    if [ -n "$MANUAL_VERSION" ]; then
+        DOWNLOAD_URL="https://www.minecraft.net/bedrockdedicatedserver/bin-linux/bedrock-server-${MANUAL_VERSION}.zip"
+        DOWNLOAD_FILE="bedrock-server-${MANUAL_VERSION}.zip"
+        curl -L -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" \
+             -H "Accept-Language: en" -o "$DOWNLOAD_FILE" "$DOWNLOAD_URL"
+    else
+        echo -e "> No version provided. Exiting."
+        exit 1
+    fi
+fi
+
+echo -e "> Unpacking server files..."
+unzip -o "$DOWNLOAD_FILE"
+
+echo -e "> Cleaning up..."
+rm -f "$DOWNLOAD_FILE"
+
+echo -e "> Restoring backup config files (ignore 'file not found' on first install)..."
+cp -rf server.properties.bak server.properties 2>/dev/null
+cp -rf permissions.json.bak permissions.json 2>/dev/null
+cp -rf whitelist.json.bak whitelist.json 2>/dev/null
+cp -rf allowlist.json.bak allowlist.json 2>/dev/null
+
+chmod +x bedrock_server
+
+echo -e "> Install Complete!"

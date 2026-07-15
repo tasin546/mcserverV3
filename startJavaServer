@@ -1,0 +1,76 @@
+#!/bin/bash
+export MAIN_DIR=$PWD
+export JAVA=$MAIN_DIR/bin/java_bins/bin/java
+SENTINEL=$MAIN_DIR/.stop_requested
+
+# Remove any stale sentinel from a previous run
+rm -f "$SENTINEL"
+
+cd "$MAIN_DIR/server" || { echo "> ERROR: server/ directory not found."; exit 1; }
+
+# Detect total RAM — reserve only 512MB for the OS, give rest to Minecraft
+mem_kb=$(grep MemTotal /proc/meminfo | awk '{print $2}')
+mem_mb=$(( mem_kb / 1024 ))
+jvm_mem=$(( mem_mb > 512 ? mem_mb - 512 : 512 ))
+
+echo "> Allocating ${jvm_mem}MB RAM to the Minecraft server."
+
+RESTART_DELAY=10
+CRASH_COUNT=0
+MAX_CRASHES=5
+
+while true; do
+  # Exit cleanly if stopserver requested a halt
+  if [ -f "$SENTINEL" ]; then
+    echo "> Stop requested. Java server will not restart."
+    break
+  fi
+
+  echo ""
+  echo "=========================================="
+  echo "  Starting Minecraft Java Server..."
+  echo "=========================================="
+
+  START_TIME=$(date +%s)
+
+  # Detect Forge servers (which use run.sh instead of server.jar)
+  if [ -f "$MAIN_DIR/forge_run.sh" ] && [ -f "$MAIN_DIR/server/run.sh" ]; then
+    echo "> Forge server detected, using run.sh..."
+    cd "$MAIN_DIR/server"
+    ./run.sh -nogui
+  else
+    "$JAVA" -Xmx${jvm_mem}M -Xms${jvm_mem}M \
+      -XX:+UseG1GC \
+      -XX:+ParallelRefProcEnabled \
+      -XX:MaxGCPauseMillis=200 \
+      -jar server.jar nogui
+  fi
+
+  EXIT_CODE=$?
+
+  # If a stop was requested during server run, exit
+  if [ -f "$SENTINEL" ]; then
+    echo "> Java server stopped gracefully."
+    break
+  fi
+
+  # If server ran for more than 60 seconds, it wasn't an instant crash — reset counter
+  END_TIME=$(date +%s)
+  RUN_DURATION=$(( END_TIME - START_TIME ))
+  if [ "$RUN_DURATION" -ge 60 ]; then
+    CRASH_COUNT=0
+  fi
+
+  CRASH_COUNT=$((CRASH_COUNT + 1))
+  echo ""
+  echo "> Server exited with code $EXIT_CODE. (Crash #${CRASH_COUNT})"
+
+  if [ "$CRASH_COUNT" -ge "$MAX_CRASHES" ]; then
+    echo "> Server has crashed $CRASH_COUNT times in a row. Giving up to prevent a crash loop."
+    echo "> Please check your server logs and fix the issue, then run ./startserver again."
+    break
+  fi
+
+  echo "> Restarting server in ${RESTART_DELAY} seconds... (Press Ctrl+C to abort)"
+  sleep "$RESTART_DELAY"
+done

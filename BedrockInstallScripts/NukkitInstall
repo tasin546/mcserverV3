@@ -1,0 +1,64 @@
+#!/bin/bash
+# PowerNukkitX Installation Script (replaces legacy NukkitX)
+# PowerNukkitX is the actively maintained Nukkit fork.
+
+sudo apt update -qq
+sudo apt install -y -qq zip unzip wget curl jq
+
+cd ..
+mkdir -p server
+cd server
+
+# -- EDIT HERE | DO NOT EDIT ABOVE -- #
+SERVER_JARFILE=server.jar # LEAVE THIS PART ALONE
+NUKKIT_VERSION=latest
+DL_PATH=
+# -- EDIT HERE | DO NOT EDIT BELOW -- #
+
+GITHUB_REPO="PowerNukkitX/PowerNukkitX"
+
+## Only download if a custom path is provided, otherwise use GitHub API
+if [ ! -z "${DL_PATH}" ]; then
+    MODIFIED_DOWNLOAD=$(eval echo $(echo ${DL_PATH} | sed -e 's/{{/${/g' -e 's/}}/}/g'))
+    wget "${MODIFIED_DOWNLOAD}" -O ${SERVER_JARFILE}
+elif [ -z "${NUKKIT_VERSION}" ] || [ "${NUKKIT_VERSION}" == "latest" ]; then
+    echo -e "\n> Fetching latest PowerNukkitX release..."
+    DOWNLOAD_URL=$(curl -sSL "https://api.github.com/repos/${GITHUB_REPO}/releases/latest" | jq -r '.assets[] | select(.name | endswith(".jar")) | .browser_download_url' | head -1)
+    
+    if [ -z "$DOWNLOAD_URL" ] || [ "$DOWNLOAD_URL" == "null" ]; then
+        echo -e "> ERROR: Could not fetch PowerNukkitX download URL from GitHub."
+        echo -e "> Please check: https://github.com/${GITHUB_REPO}/releases"
+        exit 1
+    fi
+    
+    echo -e "> Downloading: ${DOWNLOAD_URL}"
+    wget "${DOWNLOAD_URL}" -O ${SERVER_JARFILE}
+else
+    echo -e "\n> Fetching PowerNukkitX version ${NUKKIT_VERSION}..."
+    DOWNLOAD_URL=$(curl -sSL "https://api.github.com/repos/${GITHUB_REPO}/releases/tags/${NUKKIT_VERSION}" | jq -r '.assets[] | select(.name | endswith(".jar")) | .browser_download_url' | head -1)
+    
+    if [ -z "$DOWNLOAD_URL" ] || [ "$DOWNLOAD_URL" == "null" ]; then
+        echo -e "> Version '${NUKKIT_VERSION}' not found. Falling back to latest..."
+        DOWNLOAD_URL=$(curl -sSL "https://api.github.com/repos/${GITHUB_REPO}/releases/latest" | jq -r '.assets[] | select(.name | endswith(".jar")) | .browser_download_url' | head -1)
+    fi
+    
+    echo -e "> Downloading: ${DOWNLOAD_URL}"
+    wget "${DOWNLOAD_URL}" -O ${SERVER_JARFILE}
+fi
+
+if [ ! -s "${SERVER_JARFILE}" ]; then
+    echo -e "> ERROR: Download failed or file is empty."
+    exit 1
+fi
+
+if [ ! -f nukkit.yml ]; then
+    echo -e "> Downloading default nukkit.yml..."
+    wget -q https://raw.githubusercontent.com/parkervcp/eggs/master/minecraft/bedrock/nukkit/nukkit.yml 2>/dev/null || true
+fi
+
+if [ ! -f server.properties ]; then
+    echo -e "> Downloading default server.properties..."
+    wget -q https://raw.githubusercontent.com/parkervcp/eggs/master/minecraft/bedrock/nukkit/server.properties 2>/dev/null || true
+fi
+
+echo -e "> PowerNukkitX installation complete!"

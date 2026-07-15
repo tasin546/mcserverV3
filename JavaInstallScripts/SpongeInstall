@@ -1,0 +1,51 @@
+#!/bin/bash
+# Sponge Installation Script
+# Uses the official Sponge downloads API (new endpoint since the old Maven repo is gone)
+
+sudo apt update -qq
+sudo apt install -y -qq curl jq wget > /dev/null
+
+cd ..
+mkdir -p server
+cd server
+
+echo -e "\nPlease check available SpongeVanilla versions at: https://spongepowered.org/downloads/spongevanilla"
+echo -e "\n> Enter Minecraft version for SpongeVanilla (e.g. 1.20.6, or press Enter for latest):"
+MINECRAFT_VERSION=latest
+read MINECRAFT_VERSION
+
+# Fetch latest recommended build from Sponge API
+API_BASE="https://dl-api-new.spongepowered.org/api/v2/groups/org.spongepowered/artifacts/spongevanilla"
+
+if [ -z "$MINECRAFT_VERSION" ] || [ "$MINECRAFT_VERSION" == "latest" ]; then
+    echo -e "> Fetching latest SpongeVanilla version..."
+    LATEST_INFO=$(curl -sSL "${API_BASE}/versions?recommended=true&limit=1")
+    ARTIFACT_VERSION=$(echo "$LATEST_INFO" | jq -r '.artifacts[0].version')
+    MINECRAFT_VERSION=$(echo "$ARTIFACT_VERSION" | cut -d'-' -f1)
+    echo -e "> Found: ${ARTIFACT_VERSION} (MC: ${MINECRAFT_VERSION})"
+else
+    ARTIFACT_VERSION=$(curl -sSL "${API_BASE}/versions?tags=minecraft:${MINECRAFT_VERSION}&recommended=true&limit=1" | jq -r '.artifacts[0].version')
+    if [ "$ARTIFACT_VERSION" == "null" ] || [ -z "$ARTIFACT_VERSION" ]; then
+        echo -e "> No recommended build found for MC ${MINECRAFT_VERSION}. Trying latest..."
+        ARTIFACT_VERSION=$(curl -sSL "${API_BASE}/versions?tags=minecraft:${MINECRAFT_VERSION}&limit=1" | jq -r '.artifacts[0].version')
+    fi
+fi
+
+if [ -z "$ARTIFACT_VERSION" ] || [ "$ARTIFACT_VERSION" == "null" ]; then
+    echo -e "> ERROR: Could not find a SpongeVanilla build for Minecraft ${MINECRAFT_VERSION}."
+    echo -e "> Please check available versions at: https://spongepowered.org/downloads/spongevanilla"
+    exit 1
+fi
+
+DOWNLOAD_URL="https://dl-api-new.spongepowered.org/api/v2/groups/org.spongepowered/artifacts/spongevanilla/versions/${ARTIFACT_VERSION}/downloads/spongevanilla-${ARTIFACT_VERSION}-universal.jar"
+
+echo -e "> Downloading SpongeVanilla ${ARTIFACT_VERSION}..."
+curl -sSL -o server.jar "${DOWNLOAD_URL}"
+
+if [ ! -f server.jar ]; then
+    echo -e "> Download failed! Check your internet and try again."
+    exit 1
+fi
+
+echo -e "> SpongeVanilla installation complete!"
+echo -e "> Note: SpongeVanilla ${ARTIFACT_VERSION} requires Java 21."

@@ -1,0 +1,53 @@
+#!/bin/bash
+# Bedrock Server Startup Script (with auto-restart loop)
+export MAIN_DIR=$PWD
+SENTINEL=$MAIN_DIR/.stop_requested
+
+# Remove any stale sentinel from a previous run
+rm -f "$SENTINEL"
+
+cd "$MAIN_DIR/server" || { echo "> ERROR: server/ directory not found."; exit 1; }
+
+# Bedrock server needs LD_LIBRARY_PATH set to find its shared libraries
+export LD_LIBRARY_PATH=.
+
+RESTART_DELAY=5
+CRASH_COUNT=0
+MAX_CRASHES=5
+
+while true; do
+  # Exit cleanly if stopserver requested a halt
+  if [ -f "$SENTINEL" ]; then
+    echo "> Stop requested. Bedrock server will not restart."
+    break
+  fi
+
+  echo ""
+  echo "=========================================="
+  echo "  Starting Minecraft Bedrock Server..."
+  echo "=========================================="
+
+  chmod +x bedrock_server
+  ./bedrock_server
+
+  EXIT_CODE=$?
+
+  # If a stop was requested during server run, exit
+  if [ -f "$SENTINEL" ]; then
+    echo "> Bedrock server stopped gracefully."
+    break
+  fi
+
+  CRASH_COUNT=$((CRASH_COUNT + 1))
+  echo ""
+  echo "> Server exited with code $EXIT_CODE. (Crash #${CRASH_COUNT})"
+
+  if [ "$CRASH_COUNT" -ge "$MAX_CRASHES" ]; then
+    echo "> Server has crashed $CRASH_COUNT times in a row. Giving up to prevent a crash loop."
+    echo "> Please check your server logs and fix the issue, then run ./startserver again."
+    break
+  fi
+
+  echo "> Restarting server in ${RESTART_DELAY} seconds... (Press Ctrl+C to abort)"
+  sleep "$RESTART_DELAY"
+done

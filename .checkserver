@@ -1,0 +1,40 @@
+#!/bin/bash
+# =============================================
+# Server Health Check
+# Called by startserver after the server starts.
+# Checks if the server is still running and logs
+# crash info. Does NOT loop — the auto-restart
+# in startJavaServer handles that already.
+# =============================================
+
+export MAIN_DIR=$PWD
+SLEEP_TIME=${1:-0}
+LOG_FILE="$MAIN_DIR/logs/crash.log"
+
+mkdir -p "$MAIN_DIR/logs"
+
+echo "> Checking server health..."
+if [ "$SLEEP_TIME" -gt 0 ]; then
+  sleep "$SLEEP_TIME"
+fi
+
+server=$(screen -ls | grep "server")
+
+if [ -z "$server" ]; then
+  TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
+  echo ""
+  echo "======================================================="
+  echo "  WARNING: Server screen session was not found!"
+  echo "  The server may have crashed on startup."
+  echo "  Timestamp: $TIMESTAMP"
+  echo "======================================================="
+  echo ""
+  echo "  Check logs/server.log for details."
+  echo "  If you need help, share crash info in Discord."
+  echo ""
+  echo "[$TIMESTAMP] Server crash detected on startup check." >> "$LOG_FILE"
+else
+  echo ""
+  echo "> Server health check: OK. Server is running."
+  echo ""
+fi

@@ -1,0 +1,102 @@
+#!/bin/bash
+export MAIN_DIR=$PWD
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+CYAN='\033[0;36m'
+YELLOW='\033[1;33m'
+NC='\033[0m'
+
+info()    { echo -e "${CYAN}> $1${NC}"; }
+success() { echo -e "${GREEN}> $1${NC}"; }
+warn()    { echo -e "${YELLOW}> $1${NC}"; }
+error()   { echo -e "${RED}> ERROR: $1${NC}"; }
+
+info "Starting the server up. Please wait..."
+
+# Install screen/wget if needed
+for dep in screen wget; do
+  if ! command -v $dep &>/dev/null; then
+    info "Installing missing dependency: $dep"
+    sudo apt install -y -qq $dep
+  fi
+done
+
+info "Checking Server Type..."
+
+if [ -f "$MAIN_DIR/server/bedrock_server" ]; then
+  SERVER_TYPE="bedrock"
+elif ls "$MAIN_DIR/server/"*.jar 1>/dev/null 2>&1; then
+  SERVER_TYPE="java"
+elif [ -d "$MAIN_DIR/server" ]; then
+  warn "Server directory exists but no server files found. Assuming Java."
+  SERVER_TYPE="java"
+else
+  error "No server installation found! Please run ./install first."
+  exit 1
+fi
+
+# Kill any existing server screens to avoid duplicates
+if screen -ls | grep -qE "server|playit|afk"; then
+  warn "Existing server sessions found. Stopping them to prevent duplicates..."
+  for session in server playit afk; do
+    if screen -ls | grep -q "$session"; then
+      screen -S "$session" -X quit 2>/dev/null
+    fi
+  done
+  sleep 1
+fi
+
+# Remove any stale stop sentinel
+rm -f "$MAIN_DIR/.stop_requested"
+
+# Handle EULA for Java servers
+if [[ "$SERVER_TYPE" == "java" ]] && [ ! -f "$MAIN_DIR/server/eula.txt" ]; then
+  info "EULA not found. Auto-accepting EULA..."
+  echo "eula=true" > "$MAIN_DIR/server/eula.txt"
+  success "EULA accepted!"
+fi
+
+# Create logs directory
+mkdir -p "$MAIN_DIR/logs"
+
+info "Launching server processes..."
+
+if [[ "$SERVER_TYPE" == "java" ]]; then
+  screen -S server -d -m bash -c "cd '$MAIN_DIR' && ./startJavaServer 2>&1 | tee -a logs/server.log"
+  success "Java server started in screen session 'server'."
+elif [[ "$SERVER_TYPE" == "bedrock" ]]; then
+  screen -S server -d -m bash -c "cd '$MAIN_DIR' && ./startBedrockServer 2>&1 | tee -a logs/server.log"
+  success "Bedrock server started in screen session 'server'."
+fi
+
+# Start AFK heartbeat
+screen -S afk -d -m bash -c "cd '$MAIN_DIR' && ./startAfk"
+success "Keep-alive script started in screen session 'afk'."
+
+# Start Playit tunnel
+if command -v playit &>/dev/null; then
+  screen -S playit -d -m bash -c "cd '$MAIN_DIR' && ./startPlayIt"
+  success "Playit tunnel started in screen session 'playit'."
+else
+  warn "Playit not found. Skipping tunnel. Run: curl -SsL https://playit-cloud.github.io/ppa/key.gpg | gpg --dearmor | sudo tee /etc/apt/trusted.gpg.d/playit.gpg > /dev/null && echo \"deb [signed-by=/etc/apt/trusted.gpg.d/playit.gpg] https://playit-cloud.github.io/ppa/data ./\" | sudo tee /etc/apt/sources.list.d/playit-cloud.list > /dev/null && sudo apt update && sudo apt install -y playit"
+fi
+
+echo ""
+echo -e "${GREEN}=========================================="
+echo -e "   Your Server is now ONLINE!"
+echo -e "==========================================${NC}"
+echo ""
+echo "  screen -ls              → List all running sessions"
+echo "  screen -r server        → Enter the Server Console"
+echo "  screen -r playit        → View your Server IP/Tunnel"
+echo "  screen -r afk           → View keep-alive heartbeat"
+echo "  Ctrl+A then D           → Detach from a screen session"
+echo ""
+echo -e "  ${RED}./stopserver${NC}            → Stop the server"
+echo -e "  ${YELLOW}./backup${NC}               → Backup your world files"
+echo ""
+
+# Post-launch health check
+sleep 12
+bash "$MAIN_DIR/.checkserver"
