@@ -51,14 +51,20 @@ else
         echo -e "Using the latest ${PROJECT} build for version ${MINECRAFT_VERSION}: ${BUILD_NUMBER}"
     fi
 
-    JAR_NAME="${PROJECT}-${MINECRAFT_VERSION}-${BUILD_NUMBER}.jar"
+    # Fetch build metadata to get the actual download URL (v3 uses object storage URLs)
+    BUILD_META=$(curl -sSL -A "mcserverV3/1.0" "${API_BASE}/versions/${MINECRAFT_VERSION}/builds/${BUILD_NUMBER}")
+    JAR_NAME=$(echo "$BUILD_META" | jq -r '.downloads[] | .name' | head -1)
+    DOWNLOAD_URL=$(echo "$BUILD_META" | jq -r '.downloads[] | .url' | head -1)
+
+    if [ -z "$DOWNLOAD_URL" ] || [ "$DOWNLOAD_URL" == "null" ]; then
+        echo -e "> ERROR: Failed to parse download URL from Paper API."
+        exit 1
+    fi
 
     echo "Version being downloaded:"
     echo -e "  MC Version : ${MINECRAFT_VERSION}"
     echo -e "  Build      : ${BUILD_NUMBER}"
     echo -e "  JAR Name   : ${JAR_NAME}"
-
-    DOWNLOAD_URL="${API_BASE}/versions/${MINECRAFT_VERSION}/builds/${BUILD_NUMBER}/downloads/${JAR_NAME}"
 fi
 
 echo -e "Downloading: ${DOWNLOAD_URL}"
