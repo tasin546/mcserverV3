@@ -49,8 +49,8 @@ while true; do
 
   EXIT_CODE=$?
 
-  # If a stop was requested during server run, exit
-  if [ -f "$SENTINEL" ]; then
+  # If a stop was requested during server run, or the server exited cleanly (code 0), exit
+  if [ -f "$SENTINEL" ] || [ "$EXIT_CODE" -eq 0 ]; then
     echo "> Java server stopped gracefully."
     break
   fi
